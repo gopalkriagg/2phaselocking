@@ -3,6 +3,7 @@
 #include <stdlib.h>     /* srand, rand */
 #include <time.h>       /* time */
 #include <cstdio>
+#include <set>
 using namespace std;
 
 /**************************************************************
@@ -81,11 +82,16 @@ bool canAllLocksBeGranted(int i);
 void execute(CurrentlyExecutable * c);
 // check if a transaction in the waiting queue can be moved over to the executable queue.
 void checkWaitingQueue();
+// To free up all the locks held by transactio "i"
+void freeLocks(int i);
+//To grant all required locks by Transaction[i]
+void grantAllRequiredLocks(int i);
+
 int main() {
 	
 	inputTransactions(Transactions);		//Input all tx from stdin into 'Transactions'
 	
-	updateCurrentlyExecutableTx(currentlyExecutable, Transactions);	//Updating this list in the beginning
+	updateCurrentlyExecutableTx();	//Updating this list in the beginning
 	
 	int toExecute;	//To store the index (in currentlyExecuatable) of next tx which is to be executed next.
 	while(currentlyExecutable.size() != 0) {
@@ -108,7 +114,8 @@ int main() {
 		else
 			(currentlyExecutable[toExecute]->ptr)++;	//To increment to the next instuction within tx that is to be executed
 		
-		updateCurrentlyExecutableTx(currentlyExecutable, Transactions);
+		t++;
+		updateCurrentlyExecutableTx();
 
 	}
 	
@@ -183,7 +190,7 @@ bool checkWriteLock(char dataItem) {
 bool canAllLocksBeGranted(int i) {
 	char dataItem;
 	for(int j = 0; j < Transactions[i]->operation.size(); j++) {	//Loop through all the op in the tx
-		dataItem = Transactions[i]->operation[j][1]);
+		dataItem = Transactions[i]->operation[j][1];
 		if(Transactions[i]->operation[j][0] == 'w') { //If a write lock is needed...
 			if(checkReadOrWriteLock(dataItem)) {	//Check if there is any read or write lock on data item given as argument
 				return false;	//In this case this tx cannot be put right now in currently execuatable list
@@ -201,7 +208,7 @@ bool canAllLocksBeGranted(int i) {
 
 //To execute a currently executable tx
 void execute(CurrentlyExecutable * c) {
-	scheduleEntry = new ScheduleEntry();
+	ScheduleEntry *scheduleEntry = new ScheduleEntry();
 	scheduleEntry->txID = c->tx->txID;
 	scheduleEntry->opType = c->tx->operation[c->ptr][0];
 	scheduleEntry->var = c->tx->operation[c->ptr][1];
@@ -219,7 +226,7 @@ void grantAllRequiredLocks(int i) {
 	char opType;
 	for(int j = 0; j < Transactions[i]->operation.size(); j++) {	//Loop through all the op in the tx
 		opType = Transactions[i]->operation[j][0];
-		dataItem = Transactions[i]->operationp[j][1];
+		dataItem = Transactions[i]->operation[j][1];
 		if(opType == 'w') {
 			if(readSet.find(dataItem) != readSet.end()) {	//if dataItem is found in read set
 				readSet.erase(readSet.find(dataItem));
@@ -242,9 +249,10 @@ void grantAllRequiredLocks(int i) {
 		entry->txList.push_back(Transactions[i]->txID);
 		LockTable.push_back(entry);
 	}
+	int j;
 	//Enter all readLocks requested into LockTable
 	for(it = readSet.begin(); it != readSet.end(); ++it) {
-		for(int j = 0; j < LockTable.size(); j++) {
+		for(j = 0; j < LockTable.size(); j++) {
 			if(LockTable[j]->var == *it) {
 				LockTable[j]->txList.push_back(Transactions[i]->txID);
 				break;
@@ -274,7 +282,7 @@ void checkWaitingQueue()
 		if(canAllLocksBeGranted(j)) { //implies all locks can be granted if true!
 				grantAllRequiredLocks(j); //Grant all the locks required by tx i
 				//And put this tx into currently executable ones
-				x = new CurrentlyExecutable();
+				CurrentlyExecutable *x = new CurrentlyExecutable();
 				x->tx = Transactions[j];
 				currentlyExecutable.push_back(x);
 				waitingTx.erase(waitingTx.begin()+i);
@@ -282,30 +290,22 @@ void checkWaitingQueue()
 	}
 }
 
-
-
-
-
-
-
-
-/***********************FARAH**************/
 void freeLocks(int i){
-int a=0;
-	while (a<Transaction[i]->operation.size()){
+	int a=0;
+	while (a<Transactions[i]->operation.size()){
 	for (int j=0; j< LockTable.size();j++){
-		if (LockTable[j]->var == Transaction[i]->operation[a][1])
-		LockTable.erase(j);
+		if (LockTable[j]->var == Transactions[i]->operation[a][1])
+		LockTable.erase(LockTable.begin()+j);
 	}
 	a++;
 	}
 }
 	
-void PrintSchedule()
-{
+void PrintSchedule(){
 	cout<<"TX\t"<<"operation\t"<<"var\t"<<"time"<<endl;
 	for (int i=0; i< Schedule.size();i++){
-	cout<<Schedule[i].txID<<"\t"<<Schedule[i].opType<<"\t"<<Schedule[i].var<<"\t"<<Schedule[i].timeSlot<<endl;
+		cout<<Schedule[i]->txID<<"\t"<<Schedule[i]->opType<<"\t"<<Schedule[i]->var<<"\t"<<Schedule[i]->timeSlot<<endl;
+	}
 
 }
 
