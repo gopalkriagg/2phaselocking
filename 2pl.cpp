@@ -76,8 +76,10 @@ bool checkReadOrWriteLock(char dataItem);
 //To check if there is a write lock on dataItem
 bool checkWriteLock(char dataItem);
 //To check if all locks can be granted to tx with index i
-bool canAllLocksCanBeGranted(int i);
-
+bool canAllLocksBeGranted(int i);
+//To execute a currently executable tx
+void execute(CurrentlyExecutable * c);
+void checkWaitingQueue();
 int main() {
 	
 	inputTransactions(Transactions);		//Input all tx from stdin into 'Transactions'
@@ -90,10 +92,11 @@ int main() {
 
 		//Execute an operation in currentlyExecutable[toExecute]; 
 		//Since all read and write locks were done in the beginning it won't be any problem to simply execute this instruction
-		execute(currentlyExecutable[toExecute]); //@TODO
+		//Execute also increments the ptr in this currently executable tx
+		execute(currentlyExecutable[toExecute]);
 
 		//If the currently executed op was the last op in the tx
-		if(currentlyExecutable[toExecute]->ptr == currentlyExecutable[toExecute]->tx->operation.size() - 1) {
+		if(currentlyExecutable[toExecute]->ptr == currentlyExecutable[toExecute]->tx->operation.size()) {
 			//In this case Free all the locks held by this tx.
 			freeLocks(currentlyExecutable[toExecute]->tx->txID); //@TODO
 			// then remove the tx from currently executable.
@@ -118,7 +121,7 @@ void updateCurrentlyExecutableTx() {
 			//If all the locks required by Transactions[i] can be granted (conservative 2PL) 
 			//then only grant the locks
 			//else put the tx in waiting queue
-			if(checkIfAllLocksCanBeGranted(i)) { //implies all locks can be granted if true!
+			if(canAllLocksBeGranted(i)) { //implies all locks can be granted if true!
 				grantAllRequiredLocks(i); //Grant all the locks required by tx i
 				//And put this tx into currently executable ones
 				x = new CurrentlyExecutable();
@@ -176,7 +179,8 @@ bool checkWriteLock(char dataItem) {
 }
 
 //To check if all locks can be granted to tx with index i
-bool canAllLocksCanBeGranted(int i) {
+bool canAllLocksBeGranted(int i) {
+	char dataItem;
 	for(int j = 0; j < Transactions[i]->operation.size(); j++) {	//Loop through all the op in the tx
 		dataItem = Transactions[i]->operation[j][1]);
 		if(Transactions[i]->operation[j][0] == 'w') { //If a write lock is needed...
@@ -192,4 +196,31 @@ bool canAllLocksCanBeGranted(int i) {
 		}
 	}
 	return true; //If program reaches this point then it is sure that all locks can be granted at this point
+}
+
+//To execute a currently executable tx
+void execute(CurrentlyExecutable * c) {
+	scheduleEntry = new ScheduleEntry();
+	scheduleEntry->txID = c->tx->txID;
+	scheduleEntry->opType = c->tx->operation[c->ptr][0];
+	scheduleEntry->var = c->tx->operation[c->ptr][1];
+	scheduleEntry->timeSlot = t;
+	Schedule.push_back(scheduleEntry);	//Put this schedule entry into the schedule
+	(c->ptr)++;	//Increment the ptr of this tx so that next time next operations is executed
+}
+
+//To grant all required locks by Transaction[i]
+void grantAllRequiredLocks(int i) {
+	set<char *> readSet;
+	set<char *> writeSet;
+	char dataItem;
+	char opType;
+	for(int j = 0; j < Transactions[i]->operation.size(); j++) {	//Loop through all the op in the tx
+		
+	}
+}
+
+void checkWaitingQueue()
+{
+	
 }
