@@ -79,6 +79,7 @@ bool checkWriteLock(char dataItem);
 bool canAllLocksBeGranted(int i);
 //To execute a currently executable tx
 void execute(CurrentlyExecutable * c);
+// check if a transaction in the waiting queue can be moved over to the executable queue.
 void checkWaitingQueue();
 int main() {
 	
@@ -260,5 +261,39 @@ void grantAllRequiredLocks(int i) {
 
 void checkWaitingQueue()
 {
-	
+	int i,j; // iterating variables.
+	// loops through all the transactions in the waiting queue.
+	for (i = 0; i < waitingTx.size() ; ++i){
+		// find the index of the transaction in the transactions vector that has the same id 
+		// as the one in waiting queue
+		for (j = 0; j < Transactions.size(); ++j){
+			if(waitingTx[i]->txID==Transactions[j]->txID){
+				break;
+			}
+		}
+		if(canAllLocksBeGranted(j)) { //implies all locks can be granted if true!
+				grantAllRequiredLocks(j); //Grant all the locks required by tx i
+				//And put this tx into currently executable ones
+				x = new CurrentlyExecutable();
+				x->tx = Transactions[j];
+				currentlyExecutable.push_back(x);
+				waitingTx.erase(waitingTx.begin()+i);
+			}
+	}
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
