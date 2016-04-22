@@ -76,8 +76,11 @@ bool checkReadOrWriteLock(char dataItem);
 //To check if there is a write lock on dataItem
 bool checkWriteLock(char dataItem);
 //To check if all locks can be granted to tx with index i
-bool canAllLocksCanBeGranted(int i);
-
+bool canAllLocksBeGranted(int i);
+//To execute a currently executable tx
+void execute(CurrentlyExecutable * c);
+// check if a transaction in the waiting queue can be moved over to the executable queue.
+void checkWaitingQueue();
 int main() {
 	
 	inputTransactions(Transactions);		//Input all tx from stdin into 'Transactions'
@@ -90,10 +93,11 @@ int main() {
 
 		//Execute an operation in currentlyExecutable[toExecute]; 
 		//Since all read and write locks were done in the beginning it won't be any problem to simply execute this instruction
-		execute(currentlyExecutable[toExecute]); 
+		//Execute also increments the ptr in this currently executable tx
+		execute(currentlyExecutable[toExecute]);
 
 		//If the currently executed op was the last op in the tx
-		if(currentlyExecutable[toExecute]->ptr == currentlyExecutable[toExecute]->tx->operation.size() - 1) {
+		if(currentlyExecutable[toExecute]->ptr == currentlyExecutable[toExecute]->tx->operation.size()) {
 			//In this case Free all the locks held by this tx.
 			freeLocks(currentlyExecutable[toExecute]->tx->txID); //@TODO
 			// then remove the tx from currently executable.
@@ -118,7 +122,7 @@ void updateCurrentlyExecutableTx() {
 			//If all the locks required by Transactions[i] can be granted (conservative 2PL) 
 			//then only grant the locks
 			//else put the tx in waiting queue
-			if(checkIfAllLocksCanBeGranted(i)) { //implies all locks can be granted if true!
+			if(canAllLocksBeGranted(i)) { //implies all locks can be granted if true!
 				grantAllRequiredLocks(i); //Grant all the locks required by tx i
 				//And put this tx into currently executable ones
 				x = new CurrentlyExecutable();
@@ -175,6 +179,117 @@ bool checkWriteLock(char dataItem) {
 	return false;	//Indicating there is no write lock on dataItem
 }
 
+//To check if all locks can be granted to tx with index i
+bool canAllLocksBeGranted(int i) {
+	char dataItem;
+	for(int j = 0; j < Transactions[i]->operation.size(); j++) {	//Loop through all the op in the tx
+		dataItem = Transactions[i]->operation[j][1]);
+		if(Transactions[i]->operation[j][0] == 'w') { //If a write lock is needed...
+			if(checkReadOrWriteLock(dataItem)) {	//Check if there is any read or write lock on data item given as argument
+				return false;	//In this case this tx cannot be put right now in currently execuatable list
+			}
+			//else lock('w', dataItem);	//Since it is a write lock there is no need to store which tx locked this data item.
+		}
+		else {	//If a read lock is needed...
+			if(checkWriteLock(dataItem)) {	//...but already some tx has write lock on it
+				return false;	//then set flag = 0 indicating it is not possible to execute this tx now
+			}
+		}
+	}
+	return true; //If program reaches this point then it is sure that all locks can be granted at this point
+}
+
+//To execute a currently executable tx
+void execute(CurrentlyExecutable * c) {
+	scheduleEntry = new ScheduleEntry();
+	scheduleEntry->txID = c->tx->txID;
+	scheduleEntry->opType = c->tx->operation[c->ptr][0];
+	scheduleEntry->var = c->tx->operation[c->ptr][1];
+	scheduleEntry->timeSlot = t;
+	Schedule.push_back(scheduleEntry);	//Put this schedule entry into the schedule
+	(c->ptr)++;	//Increment the ptr of this tx so that next time next operations is executed
+	t++;
+}
+
+//To grant all required locks by Transaction[i]
+void grantAllRequiredLocks(int i) {
+	set<char> readSet;
+	set<char> writeSet;
+	char dataItem;
+	char opType;
+	for(int j = 0; j < Transactions[i]->operation.size(); j++) {	//Loop through all the op in the tx
+		opType = Transactions[i]->operation[j][0];
+		dataItem = Transactions[i]->operationp[j][1];
+		if(opType == 'w') {
+			if(readSet.find(dataItem) != readSet.end()) {	//if dataItem is found in read set
+				readSet.erase(readSet.find(dataItem));
+				writeSet.insert(dataItem);
+			}
+		}
+		else {
+			if(writeSet.find(dataItem) == writeSet.end()) { //If dataItem is not found in write set
+				readSet.insert(dataItem);
+			}
+		}
+	}
+	set<char>::iterator it;
+	LockTableEntry * entry;
+	//Enter all writeLocks requested into LockTable
+	for(it = writeSet.begin(); it != writeSet.end(); ++it) {
+		entry = new LockTableEntry();
+		entry->var = *it;
+		entry->type = 'w';
+		entry->txList.push_back(Transactions[i]->txID);
+		LockTable.push_back(entry);
+	}
+	//Enter all readLocks requested into LockTable
+	for(it = readSet.begin(); it != readSet.end(); ++it) {
+		for(int j = 0; j < LockTable.size(); j++) {
+			if(LockTable[j]->var == *it) {
+				LockTable[j]->txList.push_back(Transactions[i]->txID);
+				break;
+			}
+		}
+		if(j == LockTable.size()) { //i.e. if exisiting data item is not found in LockTable
+			entry = new LockTableEntry();
+			entry->var = *it;
+			entry->type = 'r';
+			entry->txList.push_back(Transactions[i]->txID);
+		}
+	}
+}
+
+void checkWaitingQueue()
+{
+	int i,j; // iterating variables.
+	// loops through all the transactions in the waiting queue.
+	for (i = 0; i < waitingTx.size() ; ++i){
+		// find the index of the transaction in the transactions vector that has the same id 
+		// as the one in waiting queue
+		for (j = 0; j < Transactions.size(); ++j){
+			if(waitingTx[i]->txID==Transactions[j]->txID){
+				break;
+			}
+		}
+		if(canAllLocksBeGranted(j)) { //implies all locks can be granted if true!
+				grantAllRequiredLocks(j); //Grant all the locks required by tx i
+				//And put this tx into currently executable ones
+				x = new CurrentlyExecutable();
+				x->tx = Transactions[j];
+				currentlyExecutable.push_back(x);
+				waitingTx.erase(waitingTx.begin()+i);
+			}
+	}
+}
+
+
+
+
+
+
+
+
+/***********************FARAH**************/
 void freeLocks(int i){
 int a=0;
 	while (a<Transaction[i]->operation.size()){
@@ -194,23 +309,9 @@ void PrintSchedule()
 
 }
 
-	
 
-//To check if all locks can be granted to tx with index i
-bool canAllLocksCanBeGranted(int i) {
-	for(int j = 0; j < Transactions[i]->operation.size(); j++) {	//Loop through all the op in the tx
-		dataItem = Transactions[i]->operation[j][1]);
-		if(Transactions[i]->operation[j][0] == 'w') { //If a write lock is needed...
-			if(checkReadOrWriteLock(dataItem)) {	//Check if there is any read or write lock on data item given as argument
-				return false;	//In this case this tx cannot be put right now in currently execuatable list
-			}
-			//else lock('w', dataItem);	//Since it is a write lock there is no need to store which tx locked this data item.
-		}
-		else {	//If a read lock is needed...
-			if(checkWriteLock(dataItem)) {	//...but already some tx has write lock on it
-				return false;	//then set flag = 0 indicating it is not possible to execute this tx now
-			}
-		}
-	}
-	return true; //If program reaches this point then it is sure that all locks can be granted at this point
-}
+
+
+
+
+
