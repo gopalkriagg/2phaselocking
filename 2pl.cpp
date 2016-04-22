@@ -207,16 +207,54 @@ void execute(CurrentlyExecutable * c) {
 	scheduleEntry->timeSlot = t;
 	Schedule.push_back(scheduleEntry);	//Put this schedule entry into the schedule
 	(c->ptr)++;	//Increment the ptr of this tx so that next time next operations is executed
+	t++;
 }
 
 //To grant all required locks by Transaction[i]
 void grantAllRequiredLocks(int i) {
-	set<char *> readSet;
-	set<char *> writeSet;
+	set<char> readSet;
+	set<char> writeSet;
 	char dataItem;
 	char opType;
 	for(int j = 0; j < Transactions[i]->operation.size(); j++) {	//Loop through all the op in the tx
-		
+		opType = Transactions[i]->operation[j][0];
+		dataItem = Transactions[i]->operationp[j][1];
+		if(opType == 'w') {
+			if(readSet.find(dataItem) != readSet.end()) {	//if dataItem is found in read set
+				readSet.erase(readSet.find(dataItem));
+				writeSet.insert(dataItem);
+			}
+		}
+		else {
+			if(writeSet.find(dataItem) == writeSet.end()) { //If dataItem is not found in write set
+				readSet.insert(dataItem);
+			}
+		}
+	}
+	set<char>::iterator it;
+	LockTableEntry * entry;
+	//Enter all writeLocks requested into LockTable
+	for(it = writeSet.begin(); it != writeSet.end(); ++it) {
+		entry = new LockTableEntry();
+		entry->var = *it;
+		entry->type = 'w';
+		entry->txList.push_back(Transactions[i]->txID);
+		LockTable.push_back(entry);
+	}
+	//Enter all readLocks requested into LockTable
+	for(it = readSet.begin(); it != readSet.end(); ++it) {
+		for(int j = 0; j < LockTable.size(); j++) {
+			if(LockTable[j]->var == *it) {
+				LockTable[j]->txList.push_back(Transactions[i]->txID);
+				break;
+			}
+		}
+		if(j == LockTable.size()) { //i.e. if exisiting data item is not found in LockTable
+			entry = new LockTableEntry();
+			entry->var = *it;
+			entry->type = 'r';
+			entry->txList.push_back(Transactions[i]->txID);
+		}
 	}
 }
 
