@@ -16,7 +16,7 @@ class LockTableEntry {
 public:
 	char var;			//The data item locked
 	char type;			//The type of lock
-	vector<int> txList;	//The list of tx which has issued that lock
+	vector<int> txList;	//The list of IDs of tx which has issued that lock
 };
 
 /**************************************************************
@@ -50,63 +50,84 @@ public:
  * 		any tx which can currently be executed. Therefore,
  *		it doesn't contain tx whose timestamp is greater 
  *		than current time or tx which has committed.
+ *		NOTE: It contains tx which has already been granted all the required locks!
  *		Additionally, it also contains info about the current
  *		operation the tx currently is on which is initially 0.
  ***********************************************************/
 class CurrentlyExecutable {
 public:
-	int txID;			//The ID of the tx
+	Transaction * tx;	//The ptr to the tx
 	int ptr;			//The op index within tx is currently to be executed
 	CurrentlyExecutable() {
 		ptr = 0;		//Initially ptr should be 0
 	}
 };
 int t = 0;				//Time, t = 0 initially
-
-
-void updateCurrentlyExecutableTx(vector<CurrentlyExecutable *> & currentlyExecutable, vector<Transaction *> & Transactions);
+vector<LockTableEntry *> LockTable;		//LockTable is a list of all the data items (variables) which are locked by any transcation currently.
+vector<Transaction *> waitingTx;		//List of waiting transcations.
+vector<CurrentlyExecutable *> currentlyExecutable;		//The list of tx which can currently be executed. Every second this list must be updated
+vector<Transaction *> Transactions;		//It contains the list of all the transactions
+vector<ScheduleEntry *> Schedule;		//Schedule which lists the order/interleaving of operations from various tx which will be performed by the system.
+	
+void updateCurrentlyExecutableTx();
 void inputTransactions(vector<Transaction *> Transactions);
 int chooseTxToExecute(vector<CurrentlyExecutable *> currentlyExecutable);
+bool checkReadOrWriteLock(char dataItem);
+//To check if there is a write lock on dataItem
+bool checkWriteLock(char dataItem);
+//To check if all locks can be granted to tx with index i
+bool canAllLocksCanBeGranted(int i);
 
 int main() {
-	vector<LockTableEntry *> LockTable;		//LockTable is a list of all the data items (variables) which are locked by any transcation currently.
-	vector<ScheduleEntry *> Schedule;		//Schedule which lists the order/interleaving of operations from various tx which will be performed by the system.
-	vector<Transaction *> Transactions;		//It contains the list of all the transactions
-	vector<Transaction *> waitingTx;		//List of waiting transcations.
+	
 	inputTransactions(Transactions);		//Input all tx from stdin into 'Transactions'
 	
-
-	vector<CurrentlyExecutable *> currentlyExecutable;		//The list of tx which can currently be executed. Every second this list must be updated
 	updateCurrentlyExecutableTx(currentlyExecutable, Transactions);	//Updating this list in the beginning
 	
-	
-	int toExecute;	//To store the next tx which is to be executed next.
-	cout << endl;
+	int toExecute;	//To store the index (in currentlyExecuatable) of next tx which is to be executed next.
 	while(currentlyExecutable.size() != 0) {
 		toExecute = chooseTxToExecute(currentlyExecutable);
-		cout << toExecute;
-		
-		//Execute an operation in currentlyExecutable[toExecute]; Since all read and write locks were done in the beginning it won't be any problem to simply execute this instruction
-		//If the currently executed op was the last op in the tx then remove the tx from currently executable.
+
+		//Execute an operation in currentlyExecutable[toExecute]; 
+		//Since all read and write locks were done in the beginning it won't be any problem to simply execute this instruction
+		execute(currentlyExecutable[toExecute]); //@TODO
+
+		//If the currently executed op was the last op in the tx
+		if(currentlyExecutable[toExecute]->ptr == currentlyExecutable[toExecute]->tx->operation.size() - 1) {
 			//In this case Free all the locks held by this tx.
-			//Check in waiting queue if any tx can be put in currently executable tx.
+			freeLocks(currentlyExecutable[toExecute]->tx->txID); //@TODO
+			// then remove the tx from currently executable.
+			currentlyExecutable.erase(currentlyExecutable.begin() + toExecute);
+			//Check in waiting queue if any tx can be put in currently executable tx. If yes put it in currently exec.
+			checkWaitingQueue();	//@TODO
+		}
+		else
+			(currentlyExecutable[toExecute]->ptr)++;	//To increment to the next instuction within tx that is to be executed
+		
 		updateCurrentlyExecutableTx(currentlyExecutable, Transactions);
 
 	}
 	
-
-
 }
 
-void updateCurrentlyExecutableTx(vector<CurrentlyExecutable *> & currentlyExecutable, vector<Transaction *> & Transactions) {
+void updateCurrentlyExecutableTx() {
 	CurrentlyExecutable * x;
-	for(int i = 0; i < Transactions.size(); i++) {
+	char dataItem;
+	for(int i = 0; i < Transactions.size() && Transactions[i]->timestamp <= t; i++) {	//Loop through all Tx until timestamp = current time
 		if(Transactions[i]->timestamp == t) {
-			x = new CurrentlyExecutable();
-			x->txID = Transactions[i]->txID;
-			currentlyExecutable.push_back(x);
+			//If all the locks required by Transactions[i] can be granted (conservative 2PL) 
+			//then only grant the locks
+			//else put the tx in waiting queue
+			if(checkIfAllLocksCanBeGranted(i)) { //implies all locks can be granted if true!
+				grantAllRequiredLocks(i); //Grant all the locks required by tx i
+				//And put this tx into currently executable ones
+				x = new CurrentlyExecutable();
+				x->tx = Transactions[i];
+				currentlyExecutable.push_back(x);
+			}
+			else
+				waitingTx.push_back(Transactions[i]);	//put this tx in waiting Tx list
 		}
-		if(Transactions[i]->timestamp > t) break;
 	}
 }
 
@@ -134,4 +155,41 @@ void inputTransactions(vector<Transaction *> Transactions) {
 int chooseTxToExecute(vector<CurrentlyExecutable *> currentlyExecutable) {
 	srand(time(NULL));
 	return rand() % currentlyExecutable.size();
+}
+
+//To check if there is a read or write lock on dataItem
+bool checkReadOrWriteLock(char dataItem) {
+	for(int i = 0; i < LockTable.size(); i++) {
+		if(LockTable[i]->var == dataItem)
+			return true;	//Indicating there is a read or write lock on dataItem
+	}
+	return false;	//Indicating there is no lock on dataItem
+}
+
+//To check if there is a write lock on dataItem
+bool checkWriteLock(char dataItem) {
+	for(int i = 0; i < LockTable.size(); i++) {
+		if(LockTable[i]->var == dataItem && LockTable[i]->type == 'w')
+			return true;	//Indicating there is a write lock on dataItem
+	}
+	return false;	//Indicating there is no write lock on dataItem
+}
+
+//To check if all locks can be granted to tx with index i
+bool canAllLocksCanBeGranted(int i) {
+	for(int j = 0; j < Transactions[i]->operation.size(); j++) {	//Loop through all the op in the tx
+		dataItem = Transactions[i]->operation[j][1]);
+		if(Transactions[i]->operation[j][0] == 'w') { //If a write lock is needed...
+			if(checkReadOrWriteLock(dataItem)) {	//Check if there is any read or write lock on data item given as argument
+				return false;	//In this case this tx cannot be put right now in currently execuatable list
+			}
+			//else lock('w', dataItem);	//Since it is a write lock there is no need to store which tx locked this data item.
+		}
+		else {	//If a read lock is needed...
+			if(checkWriteLock(dataItem)) {	//...but already some tx has write lock on it
+				return false;	//then set flag = 0 indicating it is not possible to execute this tx now
+			}
+		}
+	}
+	return true; //If program reaches this point then it is sure that all locks can be granted at this point
 }
