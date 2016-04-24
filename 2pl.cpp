@@ -104,18 +104,24 @@ int main() {
 
 		//If the currently executed op was the last op in the tx
 		if(currentlyExecutable[toExecute]->ptr == currentlyExecutable[toExecute]->tx->operation.size()) {
+			cout<<"last operation executd of last tx"<<endl;			
 			//In this case Free all the locks held by this tx.
 			freeLocks(currentlyExecutable[toExecute]->tx->txID); //@TODO
+			cout<<"freed all its locks"<<endl;
 			// then remove the tx from currently executable.
+			
 			currentlyExecutable.erase(currentlyExecutable.begin() + toExecute);
+			cout<<"removed it from currexectable"<<endl;			
 			//Check in waiting queue if any tx can be put in currently executable tx. If yes put it in currently exec.
 			checkWaitingQueue();	//@TODO
+			cout<<"checked wait queue"<<endl;
 		}
 		else
-			(currentlyExecutable[toExecute]->ptr)++;	//To increment to the next instuction within tx that is to be executed
+			//(currentlyExecutable[toExecute]->ptr)++;	//To increment to the next instuction within tx that is to be executed
 		
-		t++;
+		
 		updateCurrentlyExecutableTx();
+		cout<<"curr executable size="<<currentlyExecutable.size()<<endl;
 
 	}
 	
@@ -233,6 +239,7 @@ void execute(CurrentlyExecutable * c) {
 	Schedule.push_back(scheduleEntry);	//Put this schedule entry into the schedule
 	(c->ptr)++;	//Increment the ptr of this tx so that next time next operations is executed
 	t++;
+	cout<<"executed "<<scheduleEntry->opType<<scheduleEntry->var<<endl;
 }
 
 //To grant all required locks by Transaction[i]
@@ -309,6 +316,7 @@ void checkWaitingQueue()
 
 void freeLocks(int i){
 	int a=0;
+	i--;
 	while (a<Transactions[i]->operation.size()){
 	for (int j=0; j< LockTable.size();j++){
 		if (LockTable[j]->var == Transactions[i]->operation[a][1] && Transactions[i]->operation[a][0]=='w')
@@ -322,9 +330,9 @@ void freeLocks(int i){
 }
 	
 void PrintSchedule(){
-	cout<<"TX\t"<<"operation\t"<<"var\t"<<"time"<<Schedule.size()<<endl;
+	cout<<"TX\t"<<"operation\t"<<"var\t"<<"time"<<endl;
 	for (int i=0; i< Schedule.size();i++){
-		cout<<Schedule[i]->txID<<"\t"<<Schedule[i]->opType<<"\t"<<Schedule[i]->var<<"\t"<<Schedule[i]->timeSlot<<endl;
+		cout<<Schedule[i]->txID<<"\t"<<Schedule[i]->opType<<"\t\t"<<Schedule[i]->var<<"\t"<<Schedule[i]->timeSlot<<endl;
 	}
 
 }
