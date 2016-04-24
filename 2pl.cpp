@@ -71,7 +71,7 @@ vector<Transaction *> Transactions;		//It contains the list of all the transacti
 vector<ScheduleEntry *> Schedule;		//Schedule which lists the order/interleaving of operations from various tx which will be performed by the system.
 	
 void updateCurrentlyExecutableTx();
-void inputTransactions(vector<Transaction *> Transactions);
+void inputTransactions();
 int chooseTxToExecute(vector<CurrentlyExecutable *> currentlyExecutable);
 bool checkReadOrWriteLock(char dataItem);
 //To check if there is a write lock on dataItem
@@ -86,13 +86,13 @@ void checkWaitingQueue();
 void freeLocks(int i);
 //To grant all required locks by Transaction[i]
 void grantAllRequiredLocks(int i);
-
+void PrintSchedule ();
 int main() {
 	
-	inputTransactions(Transactions);		//Input all tx from stdin into 'Transactions'
-	
+	inputTransactions();		//Input all tx from stdin into 'Transactions'
+	cout << "Transactions size "<< Transactions.size()<<endl;
 	updateCurrentlyExecutableTx();	//Updating this list in the beginning
-	
+	cout<<"\t"<<"curr executable size="<<currentlyExecutable.size()<<endl;
 	int toExecute;	//To store the index (in currentlyExecuatable) of next tx which is to be executed next.
 	while(currentlyExecutable.size() != 0) {
 		toExecute = chooseTxToExecute(currentlyExecutable);
@@ -119,11 +119,14 @@ int main() {
 
 	}
 	
+PrintSchedule();
+
 }
 
 void updateCurrentlyExecutableTx() {
 	CurrentlyExecutable * x;
 	char dataItem;
+	cout<<"trans size="<<Transactions.size()<<"\t"<<endl;
 	for(int i = 0; i < Transactions.size() && Transactions[i]->timestamp <= t; i++) {	//Loop through all Tx until timestamp = current time
 		if(Transactions[i]->timestamp == t) {
 			//If all the locks required by Transactions[i] can be granted (conservative 2PL) 
@@ -143,23 +146,37 @@ void updateCurrentlyExecutableTx() {
 }
 
 //inputTransactions inputs all the transactions from stdin and stores them in a list 'Transactions'
-void inputTransactions(vector<Transaction *> Transactions) {
+void inputTransactions() {
 	char * line = new char[10];				//To store a line from the input
 	char * op;								//
 	Transaction * tx;						//To store the details of current transaction being input from stdin
+	int tno = -1;
 	while(cin.getline(line, 10) ) {			//While there is input read a line
-		cout << line;
-		if(line[0] == 't') {				//If line starts with a 't' it means a new tx has started
-			tx = new Transaction();			//In such a case allocate memory for the new tx
-			sscanf(line, "t%d %d", &tx->txID, &tx->timestamp);		//Store the tx ID and timestamp when it entered the system.
-			Transactions.push_back(tx);		//Add this transaction to the list of Transactions.
+		
+		cout << line<<"\n";
+		if(line[0] == 't') {
+			cout<<"Now trans size "<<Transactions.size()<<endl;
+			tno++;				//If line starts with a 't' it means a new tx has started
+			tx = new Transaction();	
+			//char id = line[1]; 	
+			//char timestamp = line[3];	//In such a case allocate memory for the new tx
+			Transactions.push_back(tx);
+			
+			Transactions[tno]->txID = line[1]-48; 
+			Transactions[tno]->timestamp=line[3]-48;
+			cout<<"txID "<<Transactions[tno]->txID<<endl;
+			cout<<"timestamp "<<Transactions[tno]->timestamp<<endl;
+			//sscanf(line, "t%d %d", &tx->txID, &tx->timestamp);		//Store the tx ID and timestamp when it entered the system.
+			//Transactions.push_back(tx);		//Add this transaction to the list of Transactions.
 		}
 		else {								//If first char is not 't' then this line must be a new operation in existing tx
 			op = new char[2];				//Allocate memory for this operation
-			op[0] = line[0];				//op[0] stores the type of operation ie read or write
-			op[1] = line[1];				//op[1] stores the data item on which this op is being executed
-			tx->operation.push_back(op);	//Add this operation to the current tx's list of operations.
+			op[0] = line[0];  				//op[0] stores the type of operation ie read or write
+			op[1] = line[1]; cout<<"op is "<<op<<endl;				//op[1] stores the data item on which this op is being executed
+			Transactions[tno]->operation.push_back(op);	//Add this operation to the current tx's list of operations.
+		
 		}
+	
 	}
 }
 
@@ -294,15 +311,18 @@ void freeLocks(int i){
 	int a=0;
 	while (a<Transactions[i]->operation.size()){
 	for (int j=0; j< LockTable.size();j++){
-		if (LockTable[j]->var == Transactions[i]->operation[a][1])
+		if (LockTable[j]->var == Transactions[i]->operation[a][1] && Transactions[i]->operation[a][0]=='w')
 		LockTable.erase(LockTable.begin()+j);
+		else if (LockTable[j]->var == Transactions[i]->operation[a][1] && Transactions[i]->operation[a][0]=='r'){
+			//for (int k=0 ; k<LockTable.size()&& k!=j; k++ ){
+			if (LockTable[j]->txList.size()==1) LockTable.erase(LockTable.begin()+j); }
 	}
 	a++;
 	}
 }
 	
 void PrintSchedule(){
-	cout<<"TX\t"<<"operation\t"<<"var\t"<<"time"<<endl;
+	cout<<"TX\t"<<"operation\t"<<"var\t"<<"time"<<Schedule.size()<<endl;
 	for (int i=0; i< Schedule.size();i++){
 		cout<<Schedule[i]->txID<<"\t"<<Schedule[i]->opType<<"\t"<<Schedule[i]->var<<"\t"<<Schedule[i]->timeSlot<<endl;
 	}
